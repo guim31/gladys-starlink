@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-15
+
 ### Added
 
 - The Starlink dish as a Gladys device, read on the local network through its
@@ -32,4 +34,5 @@ the notes of the version's GitHub Release.
 - English, French, German and Spanish texts and documentation.
 - `scripts/probe.mjs`, a read-only check of a real dish.
 
-[Unreleased]: https://github.com/guim31/gladys-starlink/commits/main
+[Unreleased]: https://github.com/guim31/gladys-starlink/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/guim31/gladys-starlink/releases/tag/v1.0.1
