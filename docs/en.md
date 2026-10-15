@@ -1,61 +1,151 @@
-# Demo Devices Template
+# Starlink
 
-This is the user documentation of the integration. Gladys re-hosts this file
-and shows a permanent **Documentation** link to it in the Configuration screen
-(in the user's language, with English as the fallback) — it is when
-configuring that the user needs it most. Keep the short onboarding hints in
-the `section` blocks of the manifest `config_schema`; put the long
-step-by-step (screenshots, troubleshooting…) here.
+Your Starlink dish in Gladys: its state, latency, packet loss, throughput, obstruction, alerts and snow
+melt mode, read on your local network like the Starlink app does. Scene triggers tell when the
+connection drops and comes back, and a dashboard widget shows the dish at a glance.
 
-## What you get
+> **Developed without the hardware: feedback welcome.** The integration was written from the protocol
+> published by the community and tested against recorded dish answers, not against a real dish. Please
+> report what works and what does not on the Gladys forum or in the GitHub issues.
+>
+> This integration is not affiliated with, endorsed by or supported by SpaceX or Starlink.
 
-Six demo devices show up after installation: a weather station (real data
-from Open-Meteo), a switch, a dimmable light, a smart plug with power
-metering, a motion sensor and a camera.
+## Overview
+
+- **One device per dish**, named after its hardware (e.g. "Starlink rev3"), identified by the dish's own
+  serial: it survives an address change.
+- **Local only**: the dish answers on `192.168.100.1:9200` (gRPC, the protocol of the Starlink app), without
+  account, password or cloud.
+- **Measures averaged over the refresh interval**: latency, packet loss and throughput come from the
+  second-by-second history of the dish, not from a single sample.
+- **Self-refreshing**: the integration reads the dish on its own timer; it does not depend on Gladys polling
+  the device.
+- **Safe by default**: rebooting or stowing the dish cuts the Internet, so these commands stay refused until
+  you allow them.
+
+## Prerequisites
+
+- Gladys Assistant **5.1.0** or later (scene triggers, scene actions and widgets).
+- A Starlink dish (standard, Gen 2 "rectangular", Gen 3, Mini…) powered on.
+- **Gladys must reach `192.168.100.1`**. The integration runs in its own container on a Docker bridge
+  network: its traffic goes out through the Gladys host, so it reaches the dish exactly when the Gladys host
+  does.
+  - With the **Starlink router**, it works as is: the router forwards `192.168.100.1` to the dish.
+  - With **your own router** and the Starlink router in **bypass mode** (or a Starlink Ethernet adapter
+    plugged into your router), most routers reach the dish address directly. If not, add on your router a
+    static route to `192.168.100.1/32` through its WAN (Internet) interface.
+  - Check from the Gladys host: `ping 192.168.100.1` must answer. The **Test the connection to the dish**
+    button of the configuration confirms the integration sees it.
 
 ## Configuration
 
-1. Open the **Configuration** tab of the integration.
-2. Set the **latitude** and **longitude** the demo weather station should
-   observe (they default to Paris), and pick your temperature unit.
-   The **refresh interval** sets how often the weather station and the
-   plug's power are read: every 5 minutes by default, every minute at most.
-3. Save: the devices appear in the **Discovery** tab, ready to be added.
+Open **Integrations → Starlink → Configuration**:
 
-The **Prefer the local connection** toggle drives the demo plug: it reports
-the channel it actually uses as a badge (local or cloud), with an orange dot
-when it runs degraded (local refused, cloud fallback).
+| Field                                    | Default         | Role                                                                                         |
+| ---------------------------------------- | --------------- | -------------------------------------------------------------------------------------------- |
+| Dish address                             | `192.168.100.1` | IP address of the dish, optionally with the port (`9200` by default).                        |
+| Refresh interval                         | 30 seconds      | 10, 15, 30 s or 1 min. The measures are averaged over this interval.                         |
+| Language of the device texts             | Français        | Feature names (set when the dish is added) and the state text.                               |
+| Allow the commands that cut the Internet | off             | Reboot, stow and deploy are refused until you enable it. The snow melt mode needs no opt-in. |
 
-## Actions
+Then open **Integrations → Starlink → Discover** and add the dish to Gladys. The buttons of the
+configuration screen:
 
-- **Test the weather provider** — performs a live request to Open-Meteo and
-  shows the current temperature and humidity under the button.
-- **Identify a device** — pick one of your devices in the list and it will
-  signal itself (the demo light "blinks" in the logs).
+- `test_connection` — **Test the connection to the dish**: says what answered (hardware, software, state).
+- `reboot_dish` — **Reboot the dish**: the Internet comes back after a few minutes.
+- `stow_dish` — **Stow the dish**: it folds flat (before a storm, to move it). No Internet until deployed.
+- `unstow_dish` — **Deploy the dish**: it turns back to the sky and reconnects.
 
-## Scenes
+## The dish device
 
-The integration adds its own cards to the scene editor (Gladys 5.1 or
-later), under the **Integrations** category:
+| Feature              | Type (Gladys) | Meaning                                                                                 |
+| -------------------- | ------------- | --------------------------------------------------------------------------------------- |
+| Starlink online      | binary        | 1 when the dish is connected to the satellites, 0 otherwise (and when unreachable).     |
+| State                | text          | Connected, Searching for satellites, Obstructed, Stowed, Sleeping, Unreachable…         |
+| Latency              | duration (ms) | Mean ping time to the Starlink network over the interval (seconds fully lost excluded). |
+| Packet loss          | percentage    | Share of lost pings over the interval.                                                  |
+| Download / Upload    | rate (Mbit/s) | Mean traffic going through the dish over the interval — what you use, not a speed test. |
+| Obstructed sky       | percentage    | Share of the sky the dish found obstructed (trees, buildings).                          |
+| Obstructed right now | binary        | 1 while something blocks the dish at the moment of the reading.                         |
+| Uptime               | duration (h)  | Time since the last reboot of the dish.                                                 |
+| Power draw           | power (W)     | Mean power consumption over the interval (dishes that report it).                       |
+| Heating (snow melt)  | binary        | 1 while the dish heats to melt snow.                                                    |
+| Thermal throttling   | binary        | 1 while the dish limits itself because it is too hot.                                   |
+| Overheating shutdown | binary        | 1 when the dish stopped because of overheating.                                         |
+| Update pending       | binary        | 1 when a software update waits for a reboot.                                            |
+| Snow melt mode       | selection     | Automatic, Always on, Off — can be changed from Gladys.                                 |
+| Software version     | text          | The firmware of the dish.                                                               |
 
-- **Motion detected** (trigger) — starts the scene when a demo motion sensor
-  sees something move. Optionally pick the sensor and what moved (person,
-  animal); left empty, any detection matches. The following actions can
-  read what moved with `{{triggerEvent.data.target}}`.
-- **Identify a device** (action) — makes the chosen device signal itself.
-  It returns whether the device could signal itself, so the following
-  actions can depend on it.
+Only the values that change are sent to Gladys; an unchanged value is sent again every 6 hours so the
+dashboard never says "no recent value".
 
-## Dashboard
+### Snow melt mode
 
-Add the **Demo status** widget to a dashboard: it shows the live
-temperature of the weather station and the power of the office plug, the
-connection the plug currently uses (orange when degraded) and the observed
-location. Its **Identify the light** button makes the demo light signal
-itself.
+**Automatic** heats when the dish detects snow, **Always on** heats before a snowfall (more power),
+**Off** never heats (saves power, but snow may cut the connection). Choose it from the device or with the
+`set_snow_melt_mode` scene action.
+
+## Widget
+
+The `dish_status` widget (**Starlink**) shows the latency, the download and upload throughput, the
+obstructed sky, then the state (green when connected, orange during an outage, red when unreachable), the
+active alerts by name, the snow melt mode and the uptime. Once the dish is added to Gladys the tiles follow
+its features live. Its optional setting picks the dish.
+
+## Scene triggers
+
+- `connection_lost` — **Starlink connection lost**: the dish has been offline for a whole refresh interval
+  (two readings in a row), or stopped answering at all (cause `unreachable`: power cut, cable). Short drops
+  are ignored. Filter on the **Cause** (obstructed, searching, stowed, sleeping, unreachable…). Variables:
+  the cause code and the state text.
+- `connection_restored` — **Starlink connection restored**: the dish is back after a reported loss.
+  Variables: the outage duration in seconds and the cause.
+- `obstruction_detected` — **Starlink sky obstructed**: something started blocking the dish, at most once
+  every 10 minutes. Variable: the obstructed share of the sky (%).
+
+An outage already under way when Gladys starts is not reported (Gladys cannot tell when it started).
+
+## Scene actions
+
+- `reboot_dish` — **Reboot the Starlink dish**.
+- `stow_dish` — **Stow the Starlink dish**.
+- `unstow_dish` — **Deploy the Starlink dish**.
+- `set_snow_melt_mode` — **Set the Starlink snow melt mode** (automatic, always on, off).
+
+The first three cut the Internet: they fail (and the scene logs it) until **Allow the commands that cut the
+Internet** is enabled. Keep in mind that Gladys Plus, remote access and cloud notifications go through that
+same Internet access.
+
+## Scene examples
+
+- **Warn when Starlink drops**: trigger `connection_lost` with the cause "Dish not answering (power,
+  cable)" → send a message on a local channel (or a notification later, when the connection is back).
+- **Log the outages**: trigger `connection_restored` → send the message "Starlink back after
+  `outage_seconds` s".
+- **Snow is forecast**: weather condition "snow" in the evening → `set_snow_melt_mode` "Always on"; the next
+  morning → "Automatic".
+- **Watchdog**: trigger `connection_lost`, cause "No network answer" → wait 10 minutes → `reboot_dish` (with
+  the commands allowed).
 
 ## Troubleshooting
 
-The integration logs everything it does: check the integration logs from the
-Gladys UI (or `docker logs` on the host) with `LOG_LEVEL=debug` for the full
-detail.
+- **"The dish does not answer"**: from the Gladys host, `ping 192.168.100.1`. No answer: see the
+  prerequisites (bypass mode, static route). An answer but still failing: check the address and the port
+  (`9200`) in the configuration.
+- **No device in Discover**: the dish must have answered once; use **Test the connection to the dish**.
+- **Values never change**: check that the dish was added to Gladys; then look at the logs with
+  `LOG_LEVEL=debug` (each reading is logged at debug level).
+- **Power draw stays empty**: some dishes or firmware do not report it.
+- **Feature names in the wrong language**: they are fixed when the dish is added; change the language, then
+  delete and re-add the device (its history is lost).
+
+## Limits
+
+- The dish API is **unofficial**: SpaceX can change it with a firmware update. The integration ignores what
+  it does not know and keeps working with what it still finds.
+- **One dish** per installation (the address of the configuration). The Starlink Wi-Fi router is not read.
+- Download and upload are the **traffic** going through the dish, not the capacity of the link.
+- No obstruction map, no GPS position, no sleep schedule (the Starlink app does it).
+- The fastest refresh interval is 10 seconds: an outage shorter than one interval may not show.
+- Two small requests per interval (status ≈ 1 KB, history ≈ 25 KB), on the local network only: no quota,
+  no Internet traffic.

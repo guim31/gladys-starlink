@@ -1,0 +1,11 @@
+{
+  "getStatus": "e23e00",
+  "getHistory": "fa3e00",
+  "getConfig": "da7d00",
+  "reboot": "ca3e00",
+  "stow": "927d00",
+  "unstow": "927d020801",
+  "setSnowMeltMode:auto": "d27d050a03c83e01",
+  "setSnowMeltMode:always_on": "d27d070a050801c83e01",
+  "setSnowMeltMode:always_off": "d27d070a050802c83e01"
+}

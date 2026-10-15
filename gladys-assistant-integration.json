@@ -1,177 +1,590 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Starlink",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Your Starlink dish in Gladys: state, latency, throughput, obstruction, alerts. Local, no account.",
+    "fr": "Votre antenne Starlink dans Gladys : état, latence, débits, obstruction, alertes. En local.",
+    "de": "Deine Starlink-Antenne in Gladys: Status, Latenz, Durchsatz, Hindernisse, Warnungen. Lokal.",
+    "es": "Su antena Starlink en Gladys: estado, latencia, caudal, obstrucción, alertas. En local."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "docker_image": "ghcr.io/guim31/gladys-starlink:1.0.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-starlink/main/cover.png",
+  "categories": ["network"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Starlink dish",
+        "fr": "Antenne Starlink",
+        "de": "Starlink-Antenne",
+        "es": "Antena Starlink"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "The integration reads the dish on your network, like the Starlink app does: no account, no cloud. Gladys must reach the dish address (192.168.100.1 by default): with the Starlink router it works as is; with your own router in bypass mode, see the documentation.",
+        "fr": "L'intégration lit l'antenne sur votre réseau, comme l'application Starlink : ni compte, ni cloud. Gladys doit joindre l'adresse de l'antenne (192.168.100.1 par défaut) : avec le routeur Starlink, rien à faire ; avec votre propre routeur en mode bypass, voir la documentation.",
+        "de": "Die Integration liest die Antenne in deinem Netzwerk, wie die Starlink-App: kein Konto, keine Cloud. Gladys muss die Adresse der Antenne erreichen (standardmäßig 192.168.100.1): Mit dem Starlink-Router klappt das sofort, mit deinem eigenen Router im Bypass-Modus siehe die Dokumentation.",
+        "es": "La integración lee la antena en su red, como la aplicación Starlink: sin cuenta ni nube. Gladys debe alcanzar la dirección de la antena (192.168.100.1 por defecto): con el router Starlink funciona tal cual; con su propio router en modo bypass, consulte la documentación."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/guim31/gladys-starlink#readme",
+          "label": {
+            "en": "Integration documentation",
+            "fr": "Documentation de l'intégration",
+            "de": "Dokumentation der Integration",
+            "es": "Documentación de la integración"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "host",
+      "type": "string",
+      "label": {
+        "en": "Dish address",
+        "fr": "Adresse de l'antenne",
+        "de": "Adresse der Antenne",
+        "es": "Dirección de la antena"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
-    },
-    {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
       "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+        "en": "IP address of the dish, optionally followed by the port (9200 by default). Leave 192.168.100.1 unless you changed the network.",
+        "fr": "Adresse IP de l'antenne, éventuellement suivie du port (9200 par défaut). Laissez 192.168.100.1 sauf si vous avez changé le réseau.",
+        "de": "IP-Adresse der Antenne, optional mit Port (standardmäßig 9200). Lass 192.168.100.1 stehen, außer du hast das Netzwerk geändert.",
+        "es": "Dirección IP de la antena, opcionalmente seguida del puerto (9200 por defecto). Deje 192.168.100.1 salvo si cambió la red."
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "placeholder": {
+        "en": "e.g. 192.168.100.1",
+        "fr": "ex. 192.168.100.1",
+        "de": "z. B. 192.168.100.1",
+        "es": "p. ej. 192.168.100.1"
+      },
       "required": false,
-      "default": "celsius",
+      "default": "192.168.100.1"
+    },
+    {
+      "key": "poll_interval",
+      "type": "select",
+      "label": {
+        "en": "Refresh interval",
+        "fr": "Intervalle de rafraîchissement",
+        "de": "Aktualisierungsintervall",
+        "es": "Intervalo de actualización"
+      },
+      "description": {
+        "en": "How often the dish is read. Latency, packet loss and throughput are averaged over this interval.",
+        "fr": "Fréquence de lecture de l'antenne. Latence, perte de paquets et débits sont moyennés sur cet intervalle.",
+        "de": "Wie oft die Antenne gelesen wird. Latenz, Paketverlust und Durchsatz werden über dieses Intervall gemittelt.",
+        "es": "Frecuencia de lectura de la antena. Latencia, pérdida de paquetes y caudal se promedian en este intervalo."
+      },
+      "required": false,
+      "default": "30",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "10",
+          "label": {
+            "en": "10 seconds",
+            "fr": "10 secondes",
+            "de": "10 Sekunden",
+            "es": "10 segundos"
+          }
+        },
+        {
+          "value": "15",
+          "label": {
+            "en": "15 seconds",
+            "fr": "15 secondes",
+            "de": "15 Sekunden",
+            "es": "15 segundos"
+          }
+        },
+        {
+          "value": "30",
+          "label": {
+            "en": "30 seconds",
+            "fr": "30 secondes",
+            "de": "30 Sekunden",
+            "es": "30 segundos"
+          }
+        },
+        {
+          "value": "60",
+          "label": { "en": "1 minute", "fr": "1 minute", "de": "1 Minute", "es": "1 minuto" }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the device texts",
+        "fr": "Langue des textes de l'appareil",
+        "de": "Sprache der Gerätetexte",
+        "es": "Idioma de los textos del dispositivo"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "Feature names (set when the dish is added to Gladys) and the state text.",
+        "fr": "Noms des fonctionnalités (fixés à l'ajout de l'antenne dans Gladys) et texte de l'état.",
+        "de": "Namen der Funktionen (beim Hinzufügen der Antenne zu Gladys festgelegt) und Statustext.",
+        "es": "Nombres de las funciones (fijados al añadir la antena a Gladys) y texto del estado."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "fr",
+      "options": [
+        {
+          "value": "en",
+          "label": { "en": "English", "fr": "English", "de": "English", "es": "English" }
+        },
+        {
+          "value": "fr",
+          "label": { "en": "Français", "fr": "Français", "de": "Français", "es": "Français" }
+        },
+        {
+          "value": "de",
+          "label": { "en": "Deutsch", "fr": "Deutsch", "de": "Deutsch", "es": "Deutsch" }
+        },
+        {
+          "value": "es",
+          "label": { "en": "Español", "fr": "Español", "de": "Español", "es": "Español" }
+        }
+      ]
+    },
+    {
+      "key": "commands",
+      "type": "section",
+      "label": {
+        "en": "Commands that cut the Internet",
+        "fr": "Commandes qui coupent Internet",
+        "de": "Befehle, die das Internet unterbrechen",
+        "es": "Comandos que cortan Internet"
+      },
+      "description": {
+        "en": "Rebooting or stowing the dish cuts the Internet access for minutes, Gladys Plus and remote access included. They stay refused until you allow them here.",
+        "fr": "Redémarrer ou ranger l'antenne coupe l'accès à Internet pendant plusieurs minutes, Gladys Plus et accès à distance compris. Elles restent refusées tant que vous ne les autorisez pas ici.",
+        "de": "Neustarten oder Verstauen der Antenne unterbricht den Internetzugang für Minuten, auch Gladys Plus und den Fernzugriff. Bis du sie hier erlaubst, bleiben sie gesperrt.",
+        "es": "Reiniciar o plegar la antena corta el acceso a Internet durante minutos, Gladys Plus y acceso remoto incluidos. Quedan rechazados mientras no los autorice aquí."
+      }
+    },
+    {
+      "key": "allow_power_commands",
+      "type": "boolean",
+      "label": {
+        "en": "Allow the commands that cut the Internet",
+        "fr": "Autoriser les commandes qui coupent Internet",
+        "de": "Befehle erlauben, die das Internet unterbrechen",
+        "es": "Permitir los comandos que cortan Internet"
+      },
+      "required": false,
+      "default": false
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
+      "key": "test_connection",
+      "label": {
+        "en": "Test the connection to the dish",
+        "fr": "Tester la connexion à l'antenne",
+        "de": "Verbindung zur Antenne testen",
+        "es": "Probar la conexión con la antena"
+      },
+      "timeout_seconds": 20
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "reboot_dish",
+      "label": {
+        "en": "Reboot the dish (cuts the Internet)",
+        "fr": "Redémarrer l'antenne (coupe Internet)",
+        "de": "Antenne neu starten (unterbricht das Internet)",
+        "es": "Reiniciar la antena (corta Internet)"
+      },
+      "timeout_seconds": 20
+    },
+    {
+      "key": "stow_dish",
+      "label": {
+        "en": "Stow the dish (cuts the Internet)",
+        "fr": "Ranger l'antenne (coupe Internet)",
+        "de": "Antenne verstauen (unterbricht das Internet)",
+        "es": "Plegar la antena (corta Internet)"
+      },
+      "timeout_seconds": 20
+    },
+    {
+      "key": "unstow_dish",
+      "label": {
+        "en": "Deploy the dish",
+        "fr": "Déployer l'antenne",
+        "de": "Antenne ausrichten",
+        "es": "Desplegar la antena"
+      },
+      "timeout_seconds": 20
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "connection_lost",
+      "label": {
+        "en": "Starlink connection lost",
+        "fr": "Connexion Starlink coupée",
+        "de": "Starlink-Verbindung unterbrochen",
+        "es": "Conexión Starlink perdida"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "The dish has been offline for a whole refresh interval, or stopped answering. Short drops are ignored.",
+        "fr": "L'antenne est hors ligne depuis tout un intervalle de rafraîchissement, ou ne répond plus. Les micro-coupures sont ignorées.",
+        "de": "Die Antenne ist ein ganzes Aktualisierungsintervall offline oder antwortet nicht mehr. Kurze Aussetzer werden ignoriert.",
+        "es": "La antena lleva desconectada todo un intervalo de actualización, o ya no responde. Los cortes breves se ignoran."
       },
       "fields": [
         {
           "key": "device",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
+          "label": { "en": "Dish", "fr": "Antenne", "de": "Antenne", "es": "Antena" }
         },
         {
-          "key": "target",
+          "key": "cause",
           "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
+          "label": { "en": "Cause", "fr": "Cause", "de": "Ursache", "es": "Causa" },
           "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
+            {
+              "value": "unreachable",
+              "label": {
+                "en": "Dish not answering (power, cable)",
+                "fr": "Antenne muette (courant, câble)",
+                "de": "Antenne antwortet nicht (Strom, Kabel)",
+                "es": "Antena sin respuesta (corriente, cable)"
+              }
+            },
+            {
+              "value": "obstructed",
+              "label": { "en": "Obstructed", "fr": "Obstruée", "de": "Verdeckt", "es": "Obstruida" }
+            },
+            {
+              "value": "searching",
+              "label": {
+                "en": "Searching for satellites",
+                "fr": "Recherche de satellites",
+                "de": "Satellitensuche",
+                "es": "Buscando satélites"
+              }
+            },
+            {
+              "value": "no_sats",
+              "label": {
+                "en": "No satellites",
+                "fr": "Aucun satellite",
+                "de": "Keine Satelliten",
+                "es": "Sin satélites"
+              }
+            },
+            {
+              "value": "booting",
+              "label": { "en": "Booting", "fr": "Démarrage", "de": "Startet", "es": "Arrancando" }
+            },
+            {
+              "value": "stowed",
+              "label": { "en": "Stowed", "fr": "Rangée", "de": "Verstaut", "es": "Plegada" }
+            },
+            {
+              "value": "sleeping",
+              "label": { "en": "Sleeping", "fr": "En veille", "de": "Ruhemodus", "es": "En reposo" }
+            },
+            {
+              "value": "thermal_shutdown",
+              "label": {
+                "en": "Overheating",
+                "fr": "Surchauffe",
+                "de": "Überhitzt",
+                "es": "Sobrecalentamiento"
+              }
+            },
+            {
+              "value": "no_downlink",
+              "label": {
+                "en": "No downlink",
+                "fr": "Pas de liaison descendante",
+                "de": "Kein Downlink",
+                "es": "Sin enlace descendente"
+              }
+            },
+            {
+              "value": "no_pings",
+              "label": {
+                "en": "No network answer",
+                "fr": "Pas de réponse du réseau",
+                "de": "Keine Antwort aus dem Netz",
+                "es": "Sin respuesta de la red"
+              }
+            }
           ]
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "cause",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "Cause code",
+            "fr": "Code de la cause",
+            "de": "Ursachencode",
+            "es": "Código de la causa"
+          }
+        },
+        {
+          "key": "state",
+          "type": "string",
+          "label": {
+            "en": "Dish state",
+            "fr": "État de l'antenne",
+            "de": "Status der Antenne",
+            "es": "Estado de la antena"
+          }
+        }
+      ]
+    },
+    {
+      "key": "connection_restored",
+      "label": {
+        "en": "Starlink connection restored",
+        "fr": "Connexion Starlink rétablie",
+        "de": "Starlink-Verbindung wiederhergestellt",
+        "es": "Conexión Starlink restablecida"
+      },
+      "description": {
+        "en": "The dish is back online after a lost connection, with how long the outage lasted.",
+        "fr": "L'antenne est de nouveau en ligne après une coupure, avec la durée de la coupure.",
+        "de": "Die Antenne ist nach einer Unterbrechung wieder online, mit der Dauer des Ausfalls.",
+        "es": "La antena vuelve a estar en línea tras un corte, con la duración del corte."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": { "en": "Dish", "fr": "Antenne", "de": "Antenne", "es": "Antena" }
+        }
+      ],
+      "variables": [
+        {
+          "key": "outage_seconds",
+          "type": "number",
+          "label": {
+            "en": "Outage duration (s)",
+            "fr": "Durée de la coupure (s)",
+            "de": "Dauer des Ausfalls (s)",
+            "es": "Duración del corte (s)"
+          }
+        },
+        {
+          "key": "cause",
+          "type": "string",
+          "label": {
+            "en": "Cause code",
+            "fr": "Code de la cause",
+            "de": "Ursachencode",
+            "es": "Código de la causa"
+          }
+        }
+      ]
+    },
+    {
+      "key": "obstruction_detected",
+      "label": {
+        "en": "Starlink sky obstructed",
+        "fr": "Ciel de l'antenne Starlink obstrué",
+        "de": "Himmel der Starlink-Antenne verdeckt",
+        "es": "Cielo de la antena Starlink obstruido"
+      },
+      "description": {
+        "en": "Something blocks the view of the dish (tree, snow, building). At most once every 10 minutes.",
+        "fr": "Un obstacle masque la vue de l'antenne (arbre, neige, bâtiment). Au plus une fois toutes les 10 minutes.",
+        "de": "Etwas verdeckt die Sicht der Antenne (Baum, Schnee, Gebäude). Höchstens alle 10 Minuten.",
+        "es": "Algo tapa la vista de la antena (árbol, nieve, edificio). Como mucho una vez cada 10 minutos."
+      },
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": { "en": "Dish", "fr": "Antenne", "de": "Antenne", "es": "Antena" }
+        }
+      ],
+      "variables": [
+        {
+          "key": "obstruction_percent",
+          "type": "number",
+          "label": {
+            "en": "Obstructed sky (%)",
+            "fr": "Ciel obstrué (%)",
+            "de": "Verdeckter Himmel (%)",
+            "es": "Cielo obstruido (%)"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "reboot_dish",
+      "label": {
+        "en": "Reboot the Starlink dish",
+        "fr": "Redémarrer l'antenne Starlink",
+        "de": "Starlink-Antenne neu starten",
+        "es": "Reiniciar la antena Starlink"
       },
-      "timeout_seconds": 15,
+      "description": {
+        "en": "Cuts the Internet for a few minutes. Refused unless allowed in the configuration.",
+        "fr": "Coupe Internet quelques minutes. Refusé sauf autorisation dans la configuration.",
+        "de": "Unterbricht das Internet für einige Minuten. Abgelehnt, außer in der Konfiguration erlaubt.",
+        "es": "Corta Internet unos minutos. Rechazado salvo autorización en la configuración."
+      },
+      "timeout_seconds": 20,
       "fields": [
         {
           "key": "device",
           "type": "select",
           "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
+          "label": { "en": "Dish", "fr": "Antenne", "de": "Antenne", "es": "Antena" },
           "required": true
         }
-      ],
-      "outputs": [
+      ]
+    },
+    {
+      "key": "stow_dish",
+      "label": {
+        "en": "Stow the Starlink dish",
+        "fr": "Ranger l'antenne Starlink",
+        "de": "Starlink-Antenne verstauen",
+        "es": "Plegar la antena Starlink"
+      },
+      "description": {
+        "en": "Folds the dish flat, without Internet until deployed. Refused unless allowed in the configuration.",
+        "fr": "Met l'antenne à plat, sans Internet jusqu'au déploiement. Refusé sauf autorisation dans la configuration.",
+        "de": "Klappt die Antenne flach, ohne Internet bis zum Ausrichten. Abgelehnt, außer in der Konfiguration erlaubt.",
+        "es": "Pone la antena en horizontal, sin Internet hasta desplegarla. Rechazado salvo autorización en la configuración."
+      },
+      "timeout_seconds": 20,
+      "fields": [
         {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": { "en": "Dish", "fr": "Antenne", "de": "Antenne", "es": "Antena" },
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "unstow_dish",
+      "label": {
+        "en": "Deploy the Starlink dish",
+        "fr": "Déployer l'antenne Starlink",
+        "de": "Starlink-Antenne ausrichten",
+        "es": "Desplegar la antena Starlink"
+      },
+      "description": {
+        "en": "Turns the stowed dish back to the sky. Refused unless allowed in the configuration.",
+        "fr": "Retourne l'antenne rangée vers le ciel. Refusé sauf autorisation dans la configuration.",
+        "de": "Richtet die verstaute Antenne wieder zum Himmel aus. Abgelehnt, außer in der Konfiguration erlaubt.",
+        "es": "Vuelve a orientar la antena plegada hacia el cielo. Rechazado salvo autorización en la configuración."
+      },
+      "timeout_seconds": 20,
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": { "en": "Dish", "fr": "Antenne", "de": "Antenne", "es": "Antena" },
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "set_snow_melt_mode",
+      "label": {
+        "en": "Set the Starlink snow melt mode",
+        "fr": "Régler la fonte de neige Starlink",
+        "de": "Starlink-Schneeschmelze einstellen",
+        "es": "Ajustar el deshielo de Starlink"
+      },
+      "description": {
+        "en": "Automatic, always on (heats before a snowfall) or off (saves power).",
+        "fr": "Automatique, toujours active (chauffe avant une chute de neige) ou désactivée (économise l'énergie).",
+        "de": "Automatisch, immer an (heizt vor Schneefall) oder aus (spart Strom).",
+        "es": "Automático, siempre activado (calienta antes de una nevada) o desactivado (ahorra energía)."
+      },
+      "timeout_seconds": 20,
+      "fields": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": { "en": "Dish", "fr": "Antenne", "de": "Antenne", "es": "Antena" },
+          "required": true
+        },
+        {
+          "key": "mode",
+          "type": "select",
+          "label": { "en": "Mode", "fr": "Mode", "de": "Modus", "es": "Modo" },
+          "required": true,
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "label": {
+                "en": "Automatic",
+                "fr": "Automatique",
+                "de": "Automatisch",
+                "es": "Automático"
+              }
+            },
+            {
+              "value": "always_on",
+              "label": {
+                "en": "Always on",
+                "fr": "Toujours active",
+                "de": "Immer an",
+                "es": "Siempre activado"
+              }
+            },
+            {
+              "value": "always_off",
+              "label": { "en": "Off", "fr": "Désactivée", "de": "Aus", "es": "Desactivado" }
+            }
+          ]
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "dish_status",
+      "label": {
+        "en": "Starlink",
+        "fr": "Starlink",
+        "de": "Starlink",
+        "es": "Starlink"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "The dish at a glance: state, latency, throughput, obstruction and active alerts.",
+        "fr": "L'antenne d'un coup d'œil : état, latence, débits, obstruction et alertes actives.",
+        "de": "Die Antenne auf einen Blick: Status, Latenz, Durchsatz, Hindernisse und aktive Warnungen.",
+        "es": "La antena de un vistazo: estado, latencia, caudal, obstrucción y alertas activas."
+      },
+      "icon": "wifi",
+      "settings": [
+        {
+          "key": "device",
+          "type": "select",
+          "source": "devices",
+          "label": { "en": "Dish", "fr": "Antenne", "de": "Antenne", "es": "Antena" }
+        }
+      ]
     }
   ]
 }
