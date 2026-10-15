@@ -11,17 +11,21 @@ Gladys through
 [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
 its only runtime dependency. It started from the official JavaScript template.
 
+This one follows a **Starlink dish** over the local network, through the gRPC
+API of the dish (`192.168.100.1:9200`), with no account and no cloud.
+
 ## Commands
 
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/app.test.js              # one file
+node --test --test-name-pattern "outage"  # tests whose name matches
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
-npx github:GladysAssistant/integration-store .   # store admission checks
+npx github:GladysAssistant/integration-store --skip-image-check .   # store checks
+node scripts/probe.mjs 192.168.100.1      # a real dish, read only
 ```
 
 The CI (`.github/workflows/ci.yml`) runs `format:check`, `lint` and `test` on
@@ -32,15 +36,23 @@ pushing.
 
 ```
 index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/app.js                        the integration: polling timer, discovery, states, events, commands, widget
+src/dish.js                       the Gladys device of a dish: features, states of a reading
+src/events.js                     readings → scene events (lost / restored / obstruction), pure
+src/widgets.js                    the dashboard widget content, pure builders
+src/i18n.js                       every text, in en / fr / de / es
+src/issues.js                     repeated failures logged once
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+src/starlink/grpc.js              unary gRPC over node:http2 (h2c), no dependency
+src/starlink/protobuf.js          minimal protobuf codec (decode by field number, encode requests)
+src/starlink/schema.js            field numbers, request builders, response parsers, history averages
+src/starlink/client.js            the dish client: getStatus, getHistory, getConfig, reboot, stow...
+scripts/probe.mjs                 read-only check of a real dish (serial masked)
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (same sections)
 test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+test/helpers/fakeDish.js          a real gRPC server on 127.0.0.1 serving test/fixtures/starlink
+test/fixtures/starlink/           dish answers serialized by the OFFICIAL protobuf implementation
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -56,8 +68,8 @@ test/                             node --test, against the SDK's fake Gladys (in
   writable volume. Never log tokens, passwords or API keys.
 - **Versions belong to the Release workflow** (Actions → Release). Never edit
   `version` in `package.json` or in the manifest, nor the `docker_image` tag,
-  by hand — except on the README's hand-pushed tag path, which bumps all three
-  together before tagging. `test/manifest.test.js` checks they agree.
+  by hand: the workflow bumps all three together. `test/manifest.test.js`
+  checks they agree.
 - **Changelog.** Every user-visible change adds a line under `## [Unreleased]`
   in `CHANGELOG.md` (`### Added`, `Changed`, `Fixed`, `Removed`, `Security`).
   Never write a version heading: the Release workflow moves the section, and it
@@ -70,8 +82,10 @@ test/                             node --test, against the SDK's fake Gladys (in
   `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
   code (defaults, action, scene and widget handlers): change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text** exists in four languages (English, French, German with
+  "du", Spanish with "usted"): action messages, manifest texts, feature names,
+  widget texts, and `docs/en.md`, `fr.md`, `de.md`, `es.md`, which keep the
+  same sections. `test/i18n.test.js` enforces it.
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.
 
@@ -233,3 +247,38 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - Docs `en`, `fr`, `de`, `es` avec les mêmes sections.
 - Chauffe, ouverture, sécurité : ne rien rendre pilotable « comme un thermostat » ou par un assistant
   vocal quand une erreur serait dangereuse (leçon d'OctoPrint).
+
+## Starlink : API et pièges (propres à cette intégration)
+
+- **Protocole** : gRPC en clair (h2c) sur `192.168.100.1:9200`, service `SpaceX.API.Device.Device`,
+  méthode unaire `Handle(Request) → Response`, aucune authentification. Requêtes utilisées (numéro du
+  champ `oneof` de `Request`) : `get_status` 1004, `get_history` 1007, `dish_get_config` 2011, `reboot`
+  1001, `dish_stow` 2002 (`unstow` = champ 1), `dish_set_config` 2010. Réponses : `dish_get_status` 2004,
+  `dish_get_history` 2006, `dish_get_config` 2011, etc. ; `Response.status` (champ 2) porte une erreur.
+- **Pas de dépendance gRPC** : `node:http2` + un codec protobuf maison décodant par numéro de champ. Choix
+  délibéré : `@grpc/grpc-js` + `protobufjs` + les `.proto` (ou la réflexion) pèsent lourd et cassent à
+  chaque évolution du firmware, alors que protobuf ne réutilise jamais un numéro de champ. Les champs
+  inconnus sont ignorés ; `scripts/probe.mjs` liste ceux que l'intégration ne lit pas.
+- **Fixtures** : `test/fixtures/starlink/*.bin` sont sérialisés par l'implémentation **officielle**
+  (`generate.py`, avec les `.proto` extraits par réflexion). Ne jamais les produire avec `encode()` de
+  `src/starlink/protobuf.js` : le test deviendrait circulaire. Une valeur par défaut proto3 (0, false)
+  n'est pas écrite sur le fil : `requests.stow(false)` vaut `927d00`, comme l'appli.
+- **États** : `outage` présent ⇒ hors ligne, sa `cause` donne l'état ; `NO_SCHEDULE` (4) = « searching »
+  (vocabulaire de l'appli Starlink). Absent ⇒ `connected`.
+- **Historique** : tampons circulaires (900 échantillons d'une seconde sur les firmwares récents), compteur
+  `current` ; l'échantillon du compteur c est à l'indice `c % taille`. Un compteur inférieur au précédent =
+  redémarrage. La latence moyenne exclut les secondes à 100 % de perte (comme starlink-grpc-tools). Le
+  statut ne donne qu'un échantillon d'une seconde : il n'est que le repli.
+- **Mode fonte de neige** : dans `status.config` (champ 2000) sur les firmwares récents, sinon
+  `dish_get_config`. Pour l'écrire, `DishConfig.apply_snow_melt_mode` (1001) doit valoir `true`, sinon
+  l'antenne ignore le réglage ; `DishSetConfigResponse.error` (2) dit un refus.
+- **Couples Gladys** : aucune catégorie « pourcentage » générique ; perte de paquets et ciel obstrué
+  partagent `counter-sensor/integer` (unité `percent`, décimales permises), comme gladys-pihole : à deux
+  sur le même couple, le tableau de bord affiche leurs noms. Booléens en `input/binary`.
+- **Sandbox** : réseau en pont, l'antenne n'est joignable que si la machine Gladys la joint (route vers
+  `192.168.100.1` en mode bypass). Aucune découverte médiée possible : l'adresse est configurée.
+- **Coupures** : `connection_lost` après deux lectures hors ligne de suite (ou deux échecs de lecture,
+  cause `unreachable`) ; rien au démarrage si la coupure est déjà en cours ; `connection_restored`
+  seulement après un `connection_lost`.
+- **Commandes qui coupent Internet** (reboot, stow, unstow) : refusées tant que `allow_power_commands`
+  n'est pas coché, jamais exposées en interrupteur ni en bouton de widget.

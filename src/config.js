@@ -1,45 +1,85 @@
 // -----------------------------------------------------------------------------
-// Integration configuration.
-//
-// The configuration is filled in by the user in Gladys, from the `config_schema`
-// declared in `gladys-assistant-integration.json`. The SDK fetches it for you
-// (`gladys.getConfig()`) and notifies you of every change through
-// `gladys.onConfigUpdated()`.
-//
-// This module only provides defaults and normalizes the received object, so the
-// rest of the code never has to deal with `undefined`.
+// Integration configuration: defaults (they mirror the `default` values of the
+// manifest `config_schema`, see test/manifest.test.js) and normalization, so
+// the rest of the code never deals with strings, blanks or `undefined`.
 // -----------------------------------------------------------------------------
 
-// Defaults: they MUST stay consistent with the `default` values declared in the
-// `config_schema` of the manifest.
+import { DEVICE_POLL_FREQUENCIES } from '@gladysassistant/integration-sdk';
+import { DEFAULT_PORT } from './starlink/schema.js';
+
+export const LANGUAGES = ['en', 'fr', 'de', 'es'];
+
+// The refresh intervals offered, in seconds: the ones Gladys accepts as a
+// device poll frequency (10 s to 1 min), so the fallback onPoll keeps pace.
+export const POLL_INTERVALS = ['10', '15', '30', '60'];
+
 export const DEFAULT_CONFIG = {
-  latitude: 48.8566, // Paris
-  longitude: 2.3522,
-  unit: 'celsius', // 'celsius' | 'fahrenheit'
-  // Seconds between two reads of the polled sensors. Gladys polls at most once
-  // a minute: slower intervals are applied by skipping polls (see
-  // createPoller in src/devices/index.js).
-  poll_frequency: 300,
-  // Reserved key (NOT in config_schema): because the manifest declares both
-  // 'local' and 'cloud' in its `transports` field, Gladys shows a standard
-  // "Prefer the local connection" toggle and sends the user's choice here.
-  // Read-only for the integration; defaults to true.
-  GLADYS_PREFER_LOCAL: true,
+  host: '192.168.100.1',
+  poll_interval: '30',
+  language: 'fr',
+  allow_power_commands: false,
 };
 
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/i;
+
 /**
- * Merge the user config with the defaults.
- * @param {Record<string, unknown>} raw config returned by the SDK
+ * Parse the address typed by the user: an IP or a name, an optional port
+ * (9200 by default). Users paste URLs: the scheme and path are dropped.
+ * @param {unknown} raw
+ * @returns {{ host: string, port: number } | null} null when invalid
+ */
+export function parseAddress(raw) {
+  const text = String(raw ?? '')
+    .trim()
+    .replace(/^[a-z]+:\/\//i, '')
+    .replace(/\/.*$/, '');
+  if (!text) {
+    return null;
+  }
+  const match = text.match(/^(.*?)(?::(\d{1,5}))?$/);
+  const host = match[1].toLowerCase();
+  const port = match[2] === undefined ? DEFAULT_PORT : Number(match[2]);
+  if (port < 1 || port > 65535) {
+    return null;
+  }
+  const ipv4 = host.match(IPV4);
+  if (ipv4) {
+    return ipv4.slice(1).every((part) => Number(part) <= 255) ? { host, port } : null;
+  }
+  // Digits and dots only: a mistyped address, not a name.
+  if (/^[\d.]+$/.test(host) || !HOSTNAME.test(host)) {
+    return null;
+  }
+  return { host, port };
+}
+
+/**
+ * @param {Record<string, unknown>} raw the configuration returned by the SDK
  */
 export function normalizeConfig(raw = {}) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const typed = typeof source.host === 'string' && source.host.trim() !== '';
+  const address = parseAddress(typed ? source.host : DEFAULT_CONFIG.host);
+  const interval = String(source.poll_interval ?? DEFAULT_CONFIG.poll_interval);
   return {
-    ...DEFAULT_CONFIG,
-    ...raw,
-    // Force the types: config may arrive as strings from a form.
-    latitude: Number(raw.latitude ?? DEFAULT_CONFIG.latitude),
-    longitude: Number(raw.longitude ?? DEFAULT_CONFIG.longitude),
-    poll_frequency: Number(raw.poll_frequency ?? DEFAULT_CONFIG.poll_frequency),
-    // The preference is a boolean; anything but an explicit false means true.
-    GLADYS_PREFER_LOCAL: raw.GLADYS_PREFER_LOCAL !== false,
+    host: address?.host ?? null,
+    port: address?.port ?? DEFAULT_PORT,
+    // The typed text, for the message that says it is invalid.
+    invalidHost: address ? null : String(source.host),
+    pollIntervalS: Number(
+      POLL_INTERVALS.includes(interval) ? interval : DEFAULT_CONFIG.poll_interval,
+    ),
+    language: LANGUAGES.includes(source.language) ? source.language : DEFAULT_CONFIG.language,
+    // Rebooting or stowing the dish cuts the Internet access: opt-in only.
+    allowPowerCommands: source.allow_power_commands === true,
   };
+}
+
+/** The device poll frequency (ms) matching the configured interval. */
+export function pollFrequencyMs(config) {
+  const ms = config.pollIntervalS * 1000;
+  return Object.values(DEVICE_POLL_FREQUENCIES).includes(ms)
+    ? ms
+    : DEVICE_POLL_FREQUENCIES.EVERY_30_SECONDS;
 }

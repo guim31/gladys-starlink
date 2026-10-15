@@ -2,76 +2,119 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateWidgetContent } from '@gladysassistant/integration-sdk';
 import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
-import { buildDiscoveredDevices } from '../src/devices/index.js';
-import { simulateLanSession } from '../src/devices/plug.js';
-import { DEMO_STATUS_WIDGET, WIDGETS, refreshWidgets } from '../src/widgets.js';
+import { buildDevice, dishIds } from '../src/dish.js';
 import { normalizeConfig } from '../src/config.js';
+import { RESPONSE, parseStatus, responseMember } from '../src/starlink/schema.js';
+import { alertSummary, buildStatusContent } from '../src/widgets.js';
+import { fixture } from './helpers/fakeDish.js';
 
+const status = (name) => parseStatus(responseMember(fixture(name), RESPONSE.DISH_GET_STATUS));
 const gladys = createFakeGladys();
-const config = normalizeConfig();
-const demoStatus = WIDGETS[DEMO_STATUS_WIDGET];
 
-// What the SDK passes to onWidgetGet, plus the config index.js adds.
-const getContent = (cfg = config) =>
-  demoStatus.get(gladys, { settings: {}, language: 'en', units: 'metric', config: cfg });
-
-test('the demo_status content is rendered exactly as sent', async () => {
-  // [] = nothing the core would drop, truncate or trim to the content budget.
-  assert.deepEqual(validateWidgetContent(await getContent()), []);
-});
-
-test('the degraded plug connection content is valid too', async () => {
-  simulateLanSession(false);
-  try {
-    const content = await getContent();
-    assert.deepEqual(validateWidgetContent(content), []);
-    const status = content.components.find((component) => component.type === 'status');
-    assert.ok(
-      status.items.some((item) => item.color === 'warning'),
-      'degraded shows a warning',
-    );
-  } finally {
-    simulateLanSession(true);
+test('every content fits the core vocabulary and budget, in every language', () => {
+  for (const language of ['en', 'fr', 'de', 'es', 'it']) {
+    for (const name of ['status-connected.bin', 'status-obstructed.bin', 'status-stowed.bin']) {
+      const dish = status(name);
+      for (const ids of [null, dishIds(gladys, dish.id)]) {
+        for (const state of [null, 'unreachable']) {
+          const content = buildStatusContent({
+            configured: true,
+            reading: { status: dish, summary: null, snowMeltMode: 'always_on' },
+            state,
+            ids,
+            language,
+            ttlSeconds: 30,
+          });
+          assert.deepEqual(validateWidgetContent(content), [], `${name} ${language} ${state}`);
+          assert.ok(content.components.length <= 8);
+        }
+      }
+    }
   }
-});
-
-test('the live tiles reference features the integration publishes', async () => {
-  const featureIds = new Set(
-    buildDiscoveredDevices(gladys, config).flatMap((device) =>
-      device.features.map((feature) => feature.external_id),
-    ),
-  );
-  const liveTiles = (await getContent()).components.filter((c) => c.device_feature);
-  assert.ok(liveTiles.length > 0, 'the template demonstrates a device-bound tile');
-  for (const tile of liveTiles) {
-    assert.ok(featureIds.has(tile.device_feature), `unknown feature ${tile.device_feature}`);
-  }
-});
-
-test('every button action of the content is handled and answers a short toast', async () => {
-  const buttons = (await getContent()).components.filter((c) => c.type === 'button' && c.action);
-  assert.ok(buttons.length > 0, 'the template demonstrates a widget action');
-  for (const { action } of buttons) {
-    const message = await demoStatus.action(gladys, {
-      actionKey: action.key,
-      params: action.params ?? {},
-      settings: {},
-      config,
+  for (const configured of [true, false]) {
+    const empty = buildStatusContent({
+      configured,
+      reading: null,
+      state: null,
+      ids: null,
+      language: 'es',
+      ttlSeconds: 5,
     });
-    assert.ok(message.en, 'the toast carries at least the mandatory `en` text');
-    assert.ok(message.en.length <= 200, 'toasts are capped at 200 characters');
+    assert.deepEqual(validateWidgetContent(empty), []);
+    assert.equal(empty.ttl_seconds, 10, 'the core floor');
   }
 });
 
-test('an unknown widget action fails, so the user sees the error', async () => {
-  await assert.rejects(
-    demoStatus.action(gladys, { actionKey: 'unknown', params: {}, settings: {}, config }),
-    /Unknown widget action/,
-  );
+test('the live tiles point at features the device really has', () => {
+  const dish = status('status-connected.bin');
+  const device = buildDevice(gladys, dish, normalizeConfig());
+  const featureIds = new Set(device.features.map((feature) => feature.external_id));
+  const content = buildStatusContent({
+    configured: true,
+    reading: { status: dish, summary: null, snowMeltMode: null },
+    state: null,
+    ids: dishIds(gladys, dish.id),
+    language: 'en',
+    ttlSeconds: 30,
+  });
+  const bound = content.components.filter((component) => component.device_feature);
+  assert.equal(bound.length, 4);
+  for (const component of bound) {
+    assert.ok(featureIds.has(component.device_feature), component.device_feature);
+  }
 });
 
-test('refreshWidgets nudges every widget', () => {
-  const fresh = createFakeGladys();
-  refreshWidgets(fresh);
-  assert.deepEqual(fresh.fake.widgetRefreshes, Object.keys(WIDGETS));
+test('without the device in Gladys, the tiles carry the values', () => {
+  const content = buildStatusContent({
+    configured: true,
+    reading: {
+      status: status('status-obstructed.bin'),
+      summary: {
+        samples: 30,
+        latencyMs: 41.25,
+        dropRate: 0,
+        downlinkBps: 1.5e8,
+        uplinkBps: 1e7,
+        powerW: 40,
+      },
+      snowMeltMode: 'auto',
+    },
+    state: null,
+    ids: null,
+    language: 'fr',
+    ttlSeconds: 30,
+  });
+  const [latency, download, , obstruction, statusList] = content.components;
+  assert.deepEqual(latency, {
+    type: 'value',
+    label: 'Latence',
+    icon: 'activity',
+    value: 41.3,
+    unit: 'ms',
+  });
+  assert.equal(download.value, 150);
+  assert.equal(obstruction.value, 1.2);
+  assert.deepEqual(statusList.items[0], { label: 'État', value: 'Obstruée', color: 'warning' });
+  assert.equal(statusList.items[2].value, 'Automatique');
+  assert.equal(statusList.items[3].value, '5 h');
+});
+
+test('the alerts are named while 40 characters hold them, then counted', () => {
+  const none = alertSummary({ is_heating: false }, 'en');
+  assert.deepEqual(none, { value: 'None', color: 'success' });
+  const two = alertSummary({ is_heating: true, install_pending: true }, 'en');
+  assert.equal(two.value, 'Update pending, Heating');
+  const many = alertSummary(
+    {
+      motors_stuck: true,
+      thermal_throttle: true,
+      install_pending: true,
+      is_heating: true,
+      dbf_telem_stale: true,
+    },
+    'es',
+  );
+  assert.ok(many.value.length <= 40, many.value);
+  assert.match(many.value, /\+\d más$/);
+  assert.equal(many.color, 'warning');
 });
